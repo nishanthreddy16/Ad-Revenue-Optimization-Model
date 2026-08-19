@@ -7,41 +7,31 @@ import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
-from sklearn.cluster import KMeans
 
 
-# --------------------------------------------------
-# PAGE CONFIGURATION
-# --------------------------------------------------
+# -------------------------------------------------
+# PAGE CONFIG
+# -------------------------------------------------
 
 st.set_page_config(
-    page_title="Ad Revenue Optimization Model",
-    page_icon="📊",
+    page_title="Ad Revenue Optimizer",
+    page_icon="📈",
     layout="wide"
 )
 
 
-# --------------------------------------------------
-# TITLE
-# --------------------------------------------------
-
-st.title("📊 Ad Revenue Optimization Model for Websites")
-
-st.write(
-    "Machine Learning model to analyze website performance "
-    "and predict advertising revenue."
-)
-
-
-# --------------------------------------------------
-# LOAD DATASET
-# --------------------------------------------------
+# -------------------------------------------------
+# LOAD DATA
+# -------------------------------------------------
 
 @st.cache_data
 def load_data():
-    df = pd.read_csv("ad_revenue_dataset.csv", on_bad_lines="skip")
 
-    # Data cleaning
+    df = pd.read_csv(
+        "ad_revenue_dataset.csv",
+        on_bad_lines="skip"
+    )
+
     df.fillna(0, inplace=True)
     df.drop_duplicates(inplace=True)
 
@@ -56,10 +46,17 @@ def load_data():
     )
 
     df["avg_session_per_view"] = (
-        df["session_duration"] / df["page_views"]
+        df["session_duration"] /
+        df["page_views"].replace(0, np.nan)
     )
 
-    df.replace([np.inf, -np.inf], 0, inplace=True)
+    df.replace(
+        [np.inf, -np.inf],
+        0,
+        inplace=True
+    )
+
+    df.fillna(0, inplace=True)
 
     return df
 
@@ -67,31 +64,21 @@ def load_data():
 df = load_data()
 
 
-# --------------------------------------------------
-# SIDEBAR
-# --------------------------------------------------
+# -------------------------------------------------
+# TRAIN MODEL
+# -------------------------------------------------
 
-st.sidebar.header("Navigation")
+features = [
+    "page_views",
+    "bounce_rate",
+    "session_duration",
+    "ad_click_rate",
+    "engagement_score",
+    "effective_views",
+    "avg_session_per_view"
+]
 
-page = st.sidebar.radio(
-    "Select Section",
-    [
-        "Dashboard",
-        "Data Analysis",
-        "Visualizations",
-        "Revenue Prediction",
-        "Clustering",
-        "Model Evaluation",
-        "Business Insights"
-    ]
-)
-
-
-# --------------------------------------------------
-# MODEL DEVELOPMENT
-# --------------------------------------------------
-
-X = df.drop("ad_revenue", axis=1)
+X = df[features]
 y = df["ad_revenue"]
 
 X_train, X_test, y_train, y_test = train_test_split(
@@ -106,126 +93,227 @@ model.fit(X_train, y_train)
 
 y_pred = model.predict(X_test)
 
-
-# --------------------------------------------------
-# CLUSTERING
-# --------------------------------------------------
-
-kmeans = KMeans(
-    n_clusters=3,
-    random_state=42,
-    n_init=10
+r2 = r2_score(y_test, y_pred)
+mae = mean_absolute_error(y_test, y_pred)
+rmse = np.sqrt(
+    mean_squared_error(y_test, y_pred)
 )
 
-df["cluster"] = kmeans.fit_predict(X)
+
+# -------------------------------------------------
+# SIDEBAR INPUTS
+# -------------------------------------------------
+
+st.sidebar.title("⚙️ Input Parameters")
+
+st.sidebar.write(
+    "Adjust the values to predict advertising revenue."
+)
+
+page_views = st.sidebar.slider(
+    "Page Views",
+    min_value=int(df["page_views"].min()),
+    max_value=int(df["page_views"].max()),
+    value=int(df["page_views"].median())
+)
+
+bounce_rate = st.sidebar.slider(
+    "Bounce Rate (%)",
+    min_value=float(df["bounce_rate"].min()),
+    max_value=float(df["bounce_rate"].max()),
+    value=float(df["bounce_rate"].median()),
+    step=0.1
+)
+
+session_duration = st.sidebar.slider(
+    "Session Duration",
+    min_value=float(df["session_duration"].min()),
+    max_value=float(df["session_duration"].max()),
+    value=float(df["session_duration"].median()),
+    step=1.0
+)
+
+ad_click_rate = st.sidebar.slider(
+    "Ad Click Rate",
+    min_value=float(df["ad_click_rate"].min()),
+    max_value=float(df["ad_click_rate"].max()),
+    value=float(df["ad_click_rate"].median()),
+    step=0.1
+)
 
 
-# --------------------------------------------------
-# DASHBOARD
-# --------------------------------------------------
+# -------------------------------------------------
+# CALCULATE FEATURES
+# -------------------------------------------------
 
-if page == "Dashboard":
+engagement_score = (
+    page_views * session_duration
+)
 
-    st.header("📈 Project Dashboard")
+effective_views = (
+    page_views *
+    (1 - bounce_rate / 100)
+)
 
-    col1, col2, col3, col4 = st.columns(4)
+avg_session_per_view = (
+    session_duration / page_views
+    if page_views != 0
+    else 0
+)
 
-    with col1:
-        st.metric(
-            "Total Records",
-            len(df)
-        )
 
-    with col2:
-        st.metric(
-            "Average Revenue",
-            f"${df['ad_revenue'].mean():.2f}"
-        )
+input_data = pd.DataFrame({
+    "page_views": [page_views],
+    "bounce_rate": [bounce_rate],
+    "session_duration": [session_duration],
+    "ad_click_rate": [ad_click_rate],
+    "engagement_score": [engagement_score],
+    "effective_views": [effective_views],
+    "avg_session_per_view": [avg_session_per_view]
+})
 
-    with col3:
-        st.metric(
-            "Average Page Views",
-            f"{df['page_views'].mean():.0f}"
-        )
 
-    with col4:
-        st.metric(
-            "Average Click Rate",
-            f"{df['ad_click_rate'].mean():.2f}%"
-        )
+prediction = model.predict(input_data)[0]
 
-    st.subheader("Dataset Preview")
 
-    st.dataframe(
-        df.head(10),
-        use_container_width=True
+# -------------------------------------------------
+# HEADER
+# -------------------------------------------------
+
+st.title("📈 Ad Revenue Optimizer")
+
+st.write(
+    "Linear Regression • Website Performance • Revenue Prediction"
+)
+
+
+# -------------------------------------------------
+# TOP METRICS
+# -------------------------------------------------
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.metric(
+        "Predicted Revenue",
+        f"${prediction:,.2f}"
     )
 
-    st.subheader("Dataset Statistics")
+with col2:
+    st.metric(
+        "R² Score",
+        f"{r2:.4f}"
+    )
 
-    st.dataframe(
-        df.describe(),
-        use_container_width=True
+with col3:
+    st.metric(
+        "MAE",
+        f"{mae:.2f}"
+    )
+
+with col4:
+    st.metric(
+        "RMSE",
+        f"{rmse:.2f}"
     )
 
 
-# --------------------------------------------------
-# DATA ANALYSIS
-# --------------------------------------------------
+st.divider()
 
-elif page == "Data Analysis":
 
-    st.header("🔍 Data Analysis")
+# -------------------------------------------------
+# INPUT SUMMARY + PREDICTION
+# -------------------------------------------------
 
-    st.subheader("Dataset Shape")
+left, right = st.columns([1.4, 1])
 
-    col1, col2 = st.columns(2)
+with left:
 
-    with col1:
-        st.metric(
-            "Rows",
-            df.shape[0]
-        )
+    st.subheader("📋 Input Summary")
 
-    with col2:
-        st.metric(
-            "Columns",
-            df.shape[1]
-        )
-
-    st.subheader("Column Information")
-
-    info_df = pd.DataFrame({
-        "Column": df.columns,
-        "Data Type": df.dtypes.astype(str),
-        "Missing Values": df.isnull().sum().values
+    summary = pd.DataFrame({
+        "Parameter": [
+            "Page Views",
+            "Bounce Rate",
+            "Session Duration",
+            "Ad Click Rate"
+        ],
+        "Value": [
+            f"{page_views:,}",
+            f"{bounce_rate:.2f}%",
+            f"{session_duration:.2f}",
+            f"{ad_click_rate:.2f}%"
+        ]
     })
 
     st.dataframe(
-        info_df,
-        use_container_width=True
-    )
-
-    st.subheader("Descriptive Statistics")
-
-    st.dataframe(
-        df.describe(),
+        summary,
+        hide_index=True,
         use_container_width=True
     )
 
 
-# --------------------------------------------------
+with right:
+
+    st.subheader("💰 Predicted Ad Revenue")
+
+    st.success(
+        f"${prediction:,.2f}"
+    )
+
+    st.write(
+        "Estimated advertising revenue based on "
+        "the entered website performance."
+    )
+
+
+# -------------------------------------------------
+# DERIVED FEATURES
+# -------------------------------------------------
+
+st.subheader("🔧 Derived Features")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric(
+        "Engagement Score",
+        f"{engagement_score:,.2f}"
+    )
+
+with col2:
+    st.metric(
+        "Effective Views",
+        f"{effective_views:,.2f}"
+    )
+
+with col3:
+    st.metric(
+        "Avg Session / View",
+        f"{avg_session_per_view:.4f}"
+    )
+
+
+st.divider()
+
+
+# -------------------------------------------------
 # VISUALIZATIONS
-# --------------------------------------------------
+# -------------------------------------------------
 
-elif page == "Visualizations":
+st.subheader("📊 Data Insights")
 
-    st.header("📊 Data Visualizations")
+col1, col2 = st.columns(2)
 
-    # Revenue Distribution
-    st.subheader("Revenue Distribution")
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+# Revenue Distribution
+with col1:
+
+    st.write("**Revenue Distribution**")
+
+    fig, ax = plt.subplots(
+        figsize=(7, 4)
+    )
 
     sns.histplot(
         df["ad_revenue"],
@@ -237,328 +325,107 @@ elif page == "Visualizations":
     ax.set_xlabel("Ad Revenue")
     ax.set_ylabel("Frequency")
 
-    st.pyplot(fig)
+    st.pyplot(
+        fig,
+        use_container_width=True
+    )
 
-    # Page Views vs Revenue
-    st.subheader("Page Views vs Revenue")
+    plt.close(fig)
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+
+# Page Views vs Revenue
+with col2:
+
+    st.write("**Page Views vs Revenue**")
+
+    fig, ax = plt.subplots(
+        figsize=(7, 4)
+    )
 
     sns.scatterplot(
+        data=df,
         x="page_views",
         y="ad_revenue",
-        data=df,
         ax=ax
     )
 
     ax.set_xlabel("Page Views")
     ax.set_ylabel("Ad Revenue")
 
-    st.pyplot(fig)
-
-    # Session Duration vs Revenue
-    st.subheader("Session Duration vs Revenue")
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    sns.scatterplot(
-        x="session_duration",
-        y="ad_revenue",
-        data=df,
-        ax=ax
-    )
-
-    ax.set_xlabel("Session Duration")
-    ax.set_ylabel("Ad Revenue")
-
-    st.pyplot(fig)
-
-    # Bounce Rate vs Revenue
-    st.subheader("Bounce Rate vs Revenue")
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    sns.scatterplot(
-        x="bounce_rate",
-        y="ad_revenue",
-        data=df,
-        ax=ax
-    )
-
-    ax.set_xlabel("Bounce Rate")
-    ax.set_ylabel("Ad Revenue")
-
-    st.pyplot(fig)
-
-    # Correlation Heatmap
-    st.subheader("Correlation Heatmap")
-
-    fig, ax = plt.subplots(figsize=(10, 7))
-
-    sns.heatmap(
-        df.drop(columns=["cluster"], errors="ignore").corr(),
-        annot=True,
-        ax=ax
-    )
-
-    st.pyplot(fig)
-
-
-# --------------------------------------------------
-# REVENUE PREDICTION
-# --------------------------------------------------
-
-elif page == "Revenue Prediction":
-
-    st.header("💰 Ad Revenue Prediction")
-
-    st.write(
-        "Enter website performance values to predict advertising revenue."
-    )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        page_views = st.number_input(
-            "Page Views",
-            min_value=0.0,
-            value=10000.0
-        )
-
-        bounce_rate = st.number_input(
-            "Bounce Rate (%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=40.0
-        )
-
-    with col2:
-
-        session_duration = st.number_input(
-            "Session Duration",
-            min_value=0.0,
-            value=300.0
-        )
-
-        ad_click_rate = st.number_input(
-            "Ad Click Rate",
-            min_value=0.0,
-            value=3.0
-        )
-
-    if st.button("Predict Ad Revenue"):
-
-        # Feature Engineering
-        engagement_score = (
-            page_views * session_duration
-        )
-
-        effective_views = (
-            page_views *
-            (1 - bounce_rate / 100)
-        )
-
-        avg_session_per_view = (
-            session_duration / page_views
-            if page_views != 0
-            else 0
-        )
-
-        input_data = pd.DataFrame({
-            "page_views": [page_views],
-            "bounce_rate": [bounce_rate],
-            "session_duration": [session_duration],
-            "ad_click_rate": [ad_click_rate],
-            "engagement_score": [engagement_score],
-            "effective_views": [effective_views],
-            "avg_session_per_view": [avg_session_per_view]
-        })
-
-        prediction = model.predict(input_data)[0]
-
-        st.success(
-            f"Predicted Ad Revenue: ${prediction:.2f}"
-        )
-
-        st.subheader("Calculated Features")
-
-        feature_df = pd.DataFrame({
-            "Feature": [
-                "Engagement Score",
-                "Effective Views",
-                "Average Session per View"
-            ],
-            "Value": [
-                engagement_score,
-                effective_views,
-                avg_session_per_view
-            ]
-        })
-
-        st.dataframe(
-            feature_df,
-            use_container_width=True
-        )
-
-
-# --------------------------------------------------
-# CLUSTERING
-# --------------------------------------------------
-
-elif page == "Clustering":
-
-    st.header("🎯 Website Performance Clustering")
-
-    st.write(
-        "KMeans clustering groups websites into three performance segments."
-    )
-
-    cluster_counts = df["cluster"].value_counts().sort_index()
-
-    st.subheader("Cluster Distribution")
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    cluster_counts.plot(
-        kind="bar",
-        ax=ax
-    )
-
-    ax.set_xlabel("Cluster")
-    ax.set_ylabel("Number of Websites")
-
-    st.pyplot(fig)
-
-    st.subheader("Cluster Summary")
-
-    cluster_summary = df.groupby("cluster").mean(
-        numeric_only=True
-    )
-
-    st.dataframe(
-        cluster_summary,
+    st.pyplot(
+        fig,
         use_container_width=True
     )
 
+    plt.close(fig)
 
-# --------------------------------------------------
-# MODEL EVALUATION
-# --------------------------------------------------
 
-elif page == "Model Evaluation":
+# -------------------------------------------------
+# ACTUAL VS PREDICTED
+# -------------------------------------------------
 
-    st.header("🤖 Linear Regression Model Evaluation")
+st.subheader("🎯 Actual vs Predicted Revenue")
 
-    r2 = r2_score(
-        y_test,
-        y_pred
+fig, ax = plt.subplots(
+    figsize=(10, 5)
+)
+
+ax.scatter(
+    y_test,
+    y_pred
+)
+
+# Best fit reference line
+minimum = min(
+    y_test.min(),
+    y_pred.min()
+)
+
+maximum = max(
+    y_test.max(),
+    y_pred.max()
+)
+
+ax.plot(
+    [minimum, maximum],
+    [minimum, maximum],
+    linestyle="--"
+)
+
+ax.set_xlabel("Actual Revenue")
+ax.set_ylabel("Predicted Revenue")
+ax.set_title("Actual vs Predicted Revenue")
+
+st.pyplot(
+    fig,
+    use_container_width=True
+)
+
+plt.close(fig)
+
+
+# -------------------------------------------------
+# BUSINESS INSIGHT
+# -------------------------------------------------
+
+st.subheader("💡 Business Insight")
+
+if bounce_rate < df["bounce_rate"].median():
+
+    st.info(
+        "The bounce rate is below the dataset median, "
+        "which indicates relatively better user engagement."
     )
 
-    mae = mean_absolute_error(
-        y_test,
-        y_pred
+else:
+
+    st.warning(
+        "The bounce rate is relatively high. "
+        "Reducing bounce rate may improve user engagement."
     )
 
-    mse = mean_squared_error(
-        y_test,
-        y_pred
-    )
 
-    rmse = np.sqrt(mse)
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.metric(
-            "R² Score",
-            f"{r2:.4f}"
-        )
-
-    with col2:
-        st.metric(
-            "MAE",
-            f"{mae:.4f}"
-        )
-
-    with col3:
-        st.metric(
-            "MSE",
-            f"{mse:.4f}"
-        )
-
-    with col4:
-        st.metric(
-            "RMSE",
-            f"{rmse:.4f}"
-        )
-
-    st.subheader("Actual vs Predicted Revenue")
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    ax.scatter(
-        y_test,
-        y_pred
-    )
-
-    ax.set_xlabel("Actual Revenue")
-    ax.set_ylabel("Predicted Revenue")
-    ax.set_title("Actual vs Predicted Revenue")
-
-    st.pyplot(fig)
-
-
-# --------------------------------------------------
-# BUSINESS INSIGHTS
-# --------------------------------------------------
-
-elif page == "Business Insights":
-
-    st.header("💡 Business Insights")
-
-    st.markdown("""
-    ### Key Findings
-
-    **1. Higher Page Views**
-    
-    Higher page views generally provide more opportunities
-    for advertisements and can increase revenue.
-
-    **2. Session Duration**
-    
-    Longer sessions indicate higher user engagement and
-    provide more opportunities for ad interaction.
-
-    **3. Ad Click Rate**
-    
-    A higher ad click rate can contribute to increased
-    advertising earnings.
-
-    **4. Bounce Rate**
-    
-    A lower bounce rate generally indicates better website
-    engagement and performance.
-
-    **5. Engagement**
-    
-    Higher engagement scores indicate that users are
-    spending more time interacting with the website.
-
-    **6. Machine Learning**
-    
-    Linear Regression is used to predict advertising revenue
-    from website performance features.
-
-    **7. Clustering**
-    
-    KMeans clustering divides websites into three
-    performance groups based on their characteristics.
-    """)
-
-st.sidebar.markdown("---")
-st.sidebar.info(
-    "Ad Revenue Optimization Model\n\n"
-    "Built using Python, Pandas, Scikit-learn, "
-    "Matplotlib, Seaborn and Streamlit."
+st.caption(
+    "Ad Revenue Optimization Model | "
+    "Python • Pandas • Scikit-learn • Matplotlib • Seaborn • Streamlit"
 )
